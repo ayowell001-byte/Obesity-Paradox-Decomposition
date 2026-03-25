@@ -1,0 +1,74 @@
+@article{PhysioNet-mimiciv-2.2,
+  author = {Johnson, Alistair and Bulgarelli, Lucas and Pollard, Tom and Horng, Steven and Celi, Leo Anthony and Mark, Roger},
+  title = {{MIMIC-IV}},
+  journal = {{PhysioNet}},
+  year = {2023},
+  month = jan,
+  note = {Version 2.2},
+  doi = {10.13026/6mm1-ek67},
+  url = {https://doi.org/10.13026/6mm1-ek67}
+}
+@Article{Banack2015,
+author="Banack, Hailey R.
+and Kaufman, Jay S.",
+title="Does selection bias explain the obesity paradox among individuals with  cardiovascular disease?",
+journal="Annals of epidemiology",
+year="2015",
+month="May",
+address="United States",
+volume="25",
+number="5",
+pages="342--349",
+doi="10.1016/j.annepidem.2015.02.008",
+url="https://doi.org/10.1016/j.annepidem.2015.02.008",
+url="http://www.ncbi.nlm.nih.gov/pubmed/25867852"
+}
+@Article{Mullen2009,
+author="Mullen, John T.
+and Moorman, Donald W.
+and Davenport, Daniel L.",
+title="The obesity paradox: body mass index and outcomes in patients undergoing  nonbariatric general surgery.",
+journal="Annals of surgery",
+year="2009",
+month="Jul",
+address="United States",
+volume="250",
+number="1",
+pages="166--172",
+url="https://doi.org/10.1097/SLA.0b013e3181ad8935",
+url="http://www.ncbi.nlm.nih.gov/pubmed/19561456"
+}
+@Article{Hainer2013,
+author="Hainer, Vojtech
+and Aldhoon-Hainerov{\'a}, Irena",
+title="Obesity paradox does exist.",
+journal="Diabetes care",
+year="2013",
+month="Aug",
+address="United States",
+volume="36 Suppl 2",
+number="Suppl 2",
+pages="S276--S281",
+doi="10.2337/dcS13-2023",
+url="https://doi.org/10.2337/dcS13-2023",
+url="http://www.ncbi.nlm.nih.gov/pubmed/23882059",
+url="http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3920805"
+}
+@Article{Robinson2014,
+author="Robinson, Whitney R.
+and Furberg, Helena
+and Banack, Hailey R.",
+title="Selection bias: a missing factor in the obesity paradox debate.",
+journal="Obesity (Silver Spring, Md.)",
+year="2014",
+month="Mar",
+address="United States",
+volume="22",
+number="3",
+pages="625",
+doi="10.1002/oby.20666",
+url="https://doi.org/10.1002/oby.20666",
+url="http://www.ncbi.nlm.nih.gov/pubmed/24738156",
+url="http://www.ncbi.nlm.nih.gov/pmc/articles/PMC4102427"
+}
+

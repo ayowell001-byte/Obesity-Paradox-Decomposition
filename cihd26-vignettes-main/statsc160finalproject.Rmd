@@ -1,0 +1,571 @@
+---
+title: "STATS C160 - Winter 2026 Final Project"
+author: "Asher Yowell"
+date: "2026-03-20"
+output: 
+  pdf_document:
+    extra_dependencies: ["amsmath", "amssymb", "color", "booktabs"]
+    number_sections: true
+header-includes:
+  - \usepackage{tikz}
+  - \usetikzlibrary{shapes,decorations,arrows,calc,arrows.meta,fit,positioning}
+  - \tikzset{-Latex,auto,node distance =1 cm and 1 cm,semithick, state/.style ={ellipse, draw, minimum width = 0.7 cm}, point/.style = {circle, draw, inner sep=0.04cm,fill,node contents={}}, bidirected/.style={Latex-Latex,dashed}, el/.style = {inner sep=2pt, align=left, sloped}}
+---
+
+\section{Introduction}
+
+The Obesity Paradox remains one of the most prominent phenomena in critical care epidemiology. An elevated Body Mass Index (BMI) is a well-documented risk factor for chronic conditions such as type II diabetes, hypertension, and cardiovascular disease. However, there is a counterintuitive survival advantage for overweight patients admitted to the Intensive Care Unit (ICU) compared to those with a healthy BMI. This survival protection stands in contrast to increased mortality seen in the general population, leading to the question if extra adipose tissue biologically protective during catabolic stress or if this is a result of confounding/selection bias?
+
+In the United States, ICU admission and treatment protocols consider a patient's BMI to be an important factor, influencing the physiological reserve and clinical management strategies, however the process itself could introduce confounding as healthier patients with higher BMIs could be monitored more in less life threatening cases, while normal weight patients only appear because of life threatening diseases. The goal of this project is to decompose a causal pathway from BMI to mortality and answer a question of relevance to ICU policy. How much of the Obesity Paradox is a direct biological effect versus an indirect consequence of physiological mediation or demographic confounding? This answer as implications for risk stratification, if BMI is a direct reality, it should be implemented differently than if it is just a result of confounding bias.
+
+\subsection{Data}
+
+We will use the MIMIC-IV clinical dataset, a registry of health records from a hospital in the Boston, MA area. This dataset includes variables spanning from demographics to vitals and laboratory results. The variables for our analysis include:
+
+\begin{itemize}
+    \item \textbf{Treatment ($X$):} \texttt{bmi\_ind} --- A binarized exposure that represents the patient's BMI status at admission. We define  $X=1$ (Overweight: $ 35 >BMI \ge 25.0$) versus $X=0$ (Normal weight: $18.5 \le BMI < 25.0$).
+    
+    \item \textbf{Outcome ($Y$):} \texttt{death} --- A binary indicator for 30 day mortality. $Y=1$ denotes death within 30 days of ICU admission and $Y=0$ denotes survival.
+    
+    \item \textbf{Severity Mediators ($W$):} A set of physiological variables representing the BMI-driven causal pathway ($X \to W \to Y$):
+    \begin{itemize}
+        \item \texttt{FluidsLytes} (acute electrolyte and fluid derangement).
+        \item  \texttt{Arrhythmia} (acute rhythm disturbances and cardiac strain).
+        \item \texttt{Liver} (acute hepatic dysfunction).
+        \item \texttt{Coagulopathy} (clotting disorders).
+        \item \texttt{NeuroOther} (pre-existing neurological conditions). 
+    \end{itemize}
+    
+    \item \textbf{Confounders ($Z$):} A set of baseline co-variates determined prior to or at the immediate time of admission, ($X \leftrightarrow Z \to Y$):
+    \begin{itemize}
+        \item Demographics: \texttt{age}, \texttt{sex}, and \texttt{majority} (ethnicity status).
+        \item \texttt{charlson} (Charlson Comorbidity Index), a weighted score quantifying pre-existing chronic health conditions.
+    \end{itemize}
+\end{itemize}
+
+\section{Causal Query}
+
+We will define the causal query for the Obesity Paradox as a decomposition of the Total Variation (TV). The TV is a Layer 1 (Observational) quantity that represents the conditional difference in mortality between the overweight and normal weight populations:
+
+$$TV = E(Y \mid X = x_1) - E(Y \mid X = x_0)$$
+
+As an observational measure, it doesn't have any interventions, but instead it compares the differences between units occurring in $X = x_1$ and $X = x_0$. The main difference between this measure and the Total Effect (TE) is that it captures the back-door (spurious) variations in addition to direct and indirect.
+
+Let $X \in \{0,1\}$ be overweight vs normal BMI, $Y \in \{0,1\}$ be mortality in the ICU or the next 30 days, $W$ be a set of physiological variables, and $Z$ be a set of pre-treatment demographic/chronic confounders. We can decompose into three distinct components to isolate the Obesity Paradox from its confounders:
+
+$$TV_{x_0,x_1}(y) = x\text{-}DE_{x_0,x_1}(y\mid x_0)-x\text{-}IE_{x_1,x_0}(y|x_0)-x\text{-}SE_{x_1,x_0}(y)$$
+
+\begin{itemize}
+    \item \textbf{Direct Variation ($x\text{-}DE$):} This captures the variation in $Y$ due to the direct causal path $X \to Y$, while the mediators ($W$) and confounders ($Z$) are held at the natural state of the control group ($x_0$). This isolates the biological effect of BMI.
+    
+    \item \textbf{Indirect Variation ($x\text{-}IE$):} This represents the variation flowing because of the $X \to W \to Y$ pathway. It quantifies how much of the mortality difference is caused by BMI-induced shifts due to clinical severity.
+    
+    \item \textbf{Spurious Variation ($x\text{-}SE$):} This measures the variation arising from the confounded $X \leftrightarrow Z \to Y$ path. This accounts for the fact of different confounders such as age, sex, and the Charlson Comorbidity Index that could have different effects in the $x_1$ vs $x_0$ group.
+\end{itemize}
+
+Our primary query is to determine whether there is an observed survival advantage ($TV < 0$) and if this advantage is primarily caused by the Direct Variation, which could suggest a biological protective mechanism, or if it is caused by the Spurious Variation ($Z$) or Indirect Variation ($W$), which could suggest demographic or clinical selection biases.
+
+\section{Causal Model}
+
+We define the following structural causal model (SCM) $\mathcal{M} = \langle V, U, F, P(u) \rangle$ to represent the mechanisms of the Obesity Paradox:
+
+\subsection{Model Components}
+\begin{itemize}
+    \item \textbf{Endogenous variables:} $V = \{Z, X, W, Y\}$, where:
+    \begin{itemize}
+        \item $Z$ denotes the confounders: age, sex, majority, and charlson.
+        \item $X$ is the BMI status.
+        \item $W$ denotes the ICU mediators: FluidsLytes, Arrhythmia, Liver, Coagulopathy, and NeuroOther.
+        \item $Y$ is the survival outcome (Mortality).
+    \end{itemize}
+    \item \textbf{Exogenous variables:} $U = \{U_Z, U_X, U_W, U_Y\}$, representing unobserved factors.
+    \item \textbf{Structural equations:}
+    \begin{align}
+Z &\leftarrow f_{Z}(U_{Z}) \\
+X &\leftarrow f_X(Z, U_X) \\
+W &\leftarrow f_W(X, Z, U_W) \\
+Y &\leftarrow f_Y(X, W, Z, U_Y)
+\end{align}
+\end{itemize}
+
+\subsection{Causal Diagram}
+
+The SCM creates the following DAG $\mathcal{G}$:
+
+\begin{center}
+\begin{tikzpicture}[
+    node distance=2.5cm,
+    auto,
+    % Node styles 
+    base node/.style={circle, thick, draw=black, minimum size=1.1cm, font=\Large\bfseries, text centered},
+    confounder node/.style={rectangle, thick, draw=black, minimum size=1.1cm, font=\Large\bfseries, text centered, rotate=45},
+    >={Stealth[inset=0pt, length=7pt]}
+]
+
+  % --- Nodes ---
+  
+  % Left node
+  \node[base node] (X) {X};
+
+  % Top node (Diamond/Square)
+  \node[base node, above right=of X] (Z) {{Z}};
+
+  % Bottom node
+  \node[base node, below right=of X] (W) {W};
+
+  % Right node
+  \node[base node, below right=of Z] (Y) {Y};
+
+
+  % --- Edges ---
+
+  % Horizontal Direct Path
+  \draw[->, thick] (X) -- (Y);
+
+  % Vertical Path Z to W
+  \draw[->, thick] (Z) -- (W);
+
+  % Upper Paths
+  \draw[<->, thick, dotted] (X) -- (Z);
+  \draw[->, thick] (Z) -- (Y);
+
+  % Lower Paths
+  \draw[->, thick] (X) -- (W);
+  \draw[->, thick] (W) -- (Y);
+
+\end{tikzpicture}
+\end{center}
+
+\subsection{Key Assumptions}
+
+\textbf{Assumption 1 (Back-door Admissibility/$d$-Separation).} $Z$ satisfies the back-door criterion relative to the causal paths from $X$ to $Y$ in $\mathcal{G}$ because:
+
+\begin{enumerate}
+    \item[(i)] No variable in $Z$ is a descendant of $X$ or $W$.
+    \item[(ii)] $Z$ blocks all non-causal paths between $X$ and $Y$. 
+\end{enumerate}
+
+This is plausible as $Z$ represents pre-admission states. By conditioning on $Z$, we block the flow of spurious variation, allowing for the identification of the $x$-DE and $x$-IE effects.
+
+\textbf{Assumption 2 (Positivity / Overlap).}
+
+For all values $x \in X$ and $z \in Z$ in the support of the data: \begin{equation}
+    0 < P(X = x \mid Z = z) < 1
+\end{equation} This ensures that for every demographic and clinical profile, there is a non-zero probability of observing both high-BMI ($x_1$) and normal-BMI ($x_0$). This is necessary for the decomposition of Total Variation.
+
+\textbf{Assumption 3 (Sequential Ignorability for Mediation).}
+
+To identify the $x$-IE, we assume that given $Z$, there are no unmeasured confounders for $W \to Y$ and that $Z$ blocks all confounding between $X$ and $W$.
+
+\textbf{Assumption 4 (Consistency).}
+
+The observed mortality $Y$ for a patient with BMI $X=x$ is equal to the potential outcome $Y = Y_x$ when $X=x$. For example, we assume that High BMI ($X=1$) constitutes a stable state such that $E[Y \mid do(X=x)]$ is well-defined throughout all of the $X=x$ world.
+
+\section{Identification and Estimation}
+
+\subsection{Identification}
+
+After assuming the back door criterion because of assumption 1, the causal effect is identified using:
+
+\begin{equation}
+    P(y \mid \text{do}(x)) = \sum_{z} P(y \mid x, z)P(z)
+\end{equation}
+
+Therefore, the Average Treatment Effect (ATE) is identified as: \begin{equation}
+\text{ATE} = \sum_{z} \left( E[Y|X=1, Z=z] - E[Y|X=0, Z=z] \right) P(z).
+\end{equation}
+
+\subsection{Estimation}
+
+Because of the high dimensions of the covariate set $Z$ and the inclusion of acute mediators $W$, we can not directly calculate $P(y \mid \text{do}(x))$. Instead, we will use Augmented Inverse Propensity Weighting (AIPW). This estimator is our primary tool for effect estimation because it combines both the IPW and regression approaches for \textbf{double robustness}. By using the propensity score model, $\pi(z) = P(X = 1 \mid Z = z)$, and the outcome regression models, $\mu_x(z) = E[Y \mid X = x, Z = z]$, the estimator remains consistent if at least one is correctly specified. The function is defined as:
+
+\begin{equation}
+ATE_{AIPW} = \frac{1}{N} \sum_{i=1}^{N} \left( \mu_{x_1}(Z_i) - \mu_{x_0}(Z_i) + \frac{\textbf{1}(X_i = 1)}{\pi(Z_i)}(Y_i - \mu_{x_1}(Z_i)) - \frac{\textbf{1}(X_i = 0)}{1 - \pi(Z_i)}(Y_i - \mu_{x_0}(Z_i)) \right)
+\end{equation}
+
+\section{Results}
+
+```{r setup, include=FALSE}
+root <- rprojroot::find_root(rprojroot::has_dir(".git"))
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_knit$set(root.dir = root)
+knitr::opts_chunk$set(fig.path = file.path(root, "vignettes/estimation_files/figure-html/"))
+Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
+source(file.path(root, "r/callbacks.R"))
+source(file.path(root, "r/helpers.R"))
+source(file.path(root, "r/op-helpers.R"))
+library(data.table)
+library(xgboost)
+library(ricu)
+library(ggplot2)
+library(patchwork)
+library(faircause)
+library(gt)
+library(magrittr)
+library(tidyverse)
+library(rbibutils)
+set.seed(2026)
+```
+
+```{r echo=FALSE}
+#Load Data
+src <- "miiv" # MIMIC-IV data
+data <- load_concepts(c("death", "bmi_all", "elix_components", "age", "race", "charlson", "sex"), src, id_type = "patient", verbose = FALSE) 
+
+#All those with missing death flag have survived the hospital stay
+data <- data[is.na(death), death := FALSE]
+data[, c(meta_vars(data), "elix_components") := NULL]
+
+#Remove Obesity and Weight Loss as they are closely related to BMI
+data[, c("Obesity", "WeightLoss") := NULL]
+
+#Combine diabetes and diabetes with complications
+data[, DM := pmax(DM, DMcx)]
+data[, DMcx := NULL]
+
+#For race create the majority/minority group
+data[, majority := as.integer(race %in% "Caucasian")]
+data[, race := NULL]
+
+#BMI is binarized between normal [18.5-24.99] and overweight [25-34.99], remove any underweight and obese patients and ones who don't have BMI recorded
+data <- data[bmi_all >= 18.5 & bmi_all < 35]
+
+#Input the normal values for missing covariates
+imp_lst <- list(charlson = 0, CHF = 0, Arrhythmia = 0, Valvular = 0, PHTN = 0, PVD = 0, HTN = 0, HTNcx = 0, Paralysis = 0, NeuroOther = 0, Pulmonary = 0, DM = 0, Hypothyroid = 0, Renal = 0, Liver = 0, PUD = 0, HIV = 0, Lymphoma = 0, Mets = 0, Tumor = 0, Rheumatic = 0, Coagulopathy = 0, FluidsLytes = 0, BloodLoss = 0, Anemia = 0, Alcohol = 0, Drugs = 0, Psychoses = 0, Depression = 0)
+
+for (i in seq_len(ncol(data))) {
+  var <- names(data)[i]
+  if (any(is.na(data[[var]])) & !is.null(imp_lst[[var]]))
+    data[is.na(get(var)), c(var) := imp_lst[[var]]]
+}
+
+#Regress death onto comorbidities and age in a logistic model 
+logreg <- glm(death ~ . - bmi_all + (bmi_all < 25), data = data, 
+                family = "binomial")
+
+#Get the coefficients
+lr_coef <- summary(logreg)$coefficients
+
+#Order the variables by coefficient size
+lr_coef <- lr_coef[order(lr_coef[, 1], decreasing = TRUE), ]
+
+#Focus on comorbidities that (significantly) increase mortality 
+sel <- lr_coef[, 1] > 0 & lr_coef[, 4] < 0.05
+cmb_sel <- setdiff(rownames(lr_coef)[sel], c("age"))
+data[, bmi_ind := as.integer(bmi_all < 25)]
+
+#Simplify to the ones who change the data the most 
+final_data <- data[, c("death", "bmi_ind", "bmi_all", "age", "majority", "charlson", "sex", cmb_sel[1:5]), with=FALSE] 
+```
+
+\subsection{Total Variation}
+
+```{r echo=FALSE, warning=FALSE}
+#Constructing the causal diagram
+X <- "bmi_ind" 
+Y <- "death"
+Z <- c("age", "sex", "majority", "charlson")
+W <- c("FluidsLytes", "Arrhythmia", "Coagulopathy", "Liver", "NeuroOther")
+
+fcb <- fairness_cookbook(data = final_data, X = X, Z = Z, W = W, Y = Y, x0 = 0, x1 = 1)
+#Graph
+p_decomp_final <- autoplot(fcb) +
+  scale_fill_manual(
+    values = c("#2c3e50", "#c0392b", "#2980b9", "#7f8c8d"),
+    labels = c("Total Variation", "x-Direct", "x-Indirect", "x-Confounded"),
+    name = "Pathway"
+  ) +
+  scale_y_continuous(labels = scales::label_percent(scale = 100)) +
+  scale_x_discrete(labels = c("Total Variation", "x-Direct", "x-Indirect", "x-Confounded")) +
+  labs(
+    title = "Table 1: Causal Decomposition of the Obesity Paradox",
+    subtitle = "Relative Mortality Differences and Structural Variation Components",
+    y = "Mortality Difference (%)",
+    x = "Decomposition Pathway",
+    caption = "Source: MIMIC-IV Clinical Data"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 10, color = "gray30", hjust = 0.5, margin = margin(b = 15)),
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(face = "bold", color = "black"),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.line.x = element_line(color = "black")
+  ) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black", alpha = 0.3)
+
+p_decomp_final
+```
+
+When we look at the total variation, we see that the Total Variation is not too large, around 0.005-0.010%, this change is mostly caused by the Direct Effect, as the Indirect Effect and Confounded (Spurious) paths nearly cancel each other out. This is a surprise and reaffirms the paradox that those with a higher BMI tend to have a higher mortality rate, although this rate is not that much higher. For a patient with normal weight, their mortality rate would have been around 0.010% higher had they been given overweight while keeping the mediators unchanged. For a patient observed with normal BMI, their mortality rate would have gone down around 0.005% had they been overweight while keeping a normal BMI level on the direct pathway. For patients who are overweight and underweight, their mortality rate would have gone up 0.005% had they both been set to overweight. This needs some further investigation, starting from the spurious effect.
+
+\subsubsection{Spurious Effect}
+
+We will investigate the spurious effect by plotting each of the mediators to examine whether they have patterns that could explain the difference in mortality.
+
+```{r echo=FALSE}
+#Looking at the Spurious Effect
+final_data[, bmi_label := factor(bmi_ind, levels = c(1, 0), labels = c("Normal", "Overweight"))]
+final_data[, sex := ifelse(sex == "Male", 1, 0)]
+# Define professional colors
+bmi_colors <- c("Normal" = "#2c3e50", "Overweight" = "#e67e22")
+
+# 1. Age (Density) - Simplify labels
+p_age_pro <- ggplot(final_data, aes(x = age, fill = bmi_label)) +
+  geom_density(alpha = 0.6, color = "white") +
+  scale_fill_manual(values = bmi_colors, name = "BMI Group") +
+  labs(title = "Age Distribution", x = "Age (Years)", y = "Density") +
+  theme_minimal(base_size = 14) + # Increased base_size for visibility
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        legend.position = "bottom") 
+
+# 2. Sex (Proportion) - Use levels to fix the factor error
+p_sex_pro <- ggplot(final_data, aes(x = bmi_label, 
+                                   fill = factor(sex, levels = c(0, 1), labels = c("Male", "Female")))) +
+  geom_bar(position = "fill", alpha = 0.8, width = 0.7) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  scale_fill_manual(values = c("#3f51b5", "#ff7043"), name = "Sex") +
+  labs(title = "Sex Distribution", x = NULL, y = "Proportion") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        legend.position = "bottom")
+
+# 3. Majority (Proportion)
+p_maj_pro <- ggplot(final_data, aes(x = bmi_label, 
+                                   fill = factor(majority, levels = c(0, 1), labels = c("Minority", "Majority")))) +
+  geom_bar(position = "fill", alpha = 0.8, width = 0.7) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  scale_fill_manual(values = c("#16a085", "#f1c40f"), name = "Ethnicity") +
+  labs(title = "Ethnicity Status", x = NULL, y = "Proportion") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        legend.position = "bottom")
+
+# 4. Charlson (Binned Bar)
+p_char_pro <- ggplot(final_data, aes(x = factor(charlson), fill = bmi_label)) +
+  geom_bar(aes(y = after_stat(prop), group = bmi_label), position = "dodge") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  scale_fill_manual(values = bmi_colors, name = "BMI Group") +
+  labs(title = "Chronic Disease Burden", x = "Charlson Score", y = "Proportion") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        legend.position = "bottom",
+        panel.grid.major.x = element_blank())
+
+# Combine using patchwork with specific proportions
+combined_plot <- (p_age_pro | p_sex_pro) / (p_maj_pro | p_char_pro) + 
+  plot_annotation(
+    title = "Figure 2: Baseline Characteristics by BMI Stratum",
+    theme = theme(plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+  )
+
+combined_plot
+```
+
+When zooming on the Spurious effect, we see that there is a higher density of overweight for overweight individuals compared to underweight. For the younger individuals, the density of normal is higher. This makes sense as younger people are less likely to be overweight in general. For sex, there is a higher proportion of females who are normal weight compared to males, this could be explained by some unobserved confounders. There is almost no difference for BMI in ethnicity status, suggesting that it is not one of the main causes. The Charlson score proportions have an apparent pattern, as the proportion of Overweight vs Normal is higher for each number starting from 1, suggesting that most of Normal people could have a Charlson score of 0.
+
+\subsubsection{Indirect Effect}
+
+For the indirect effect, we want to analyze all of the ICU mediators $W$. If we look only at the conditional distribution $P(W \mid X = x)$ we have not adjusted for BMI's effect. We know that the effect of BMI is important because older patients are more likely to have a higher BMI than younger patients. Patients with a lower BMI are more likely to have a lower Charlson score than overweight patients. So, to resolve this, we will create a function that adjusts for the effect of BMI so we get the indirect effect, which is shown in the table below:
+
+```{r echo=FALSE}
+#Looking at the Indirect Effect
+mc_bmi_adjust <- function(dat, n_mc = list(10^5, 10^5)) {
+  # 2. Pre-compute look up list for Demographic groups (Majority vs Minority)
+  # Indices: 1 = Minority (majority=0), 2 = Majority (majority=1)
+  min_bmi <- min(dat$bmi_all, na.rm = TRUE)
+  max_bmi <- max(dat$bmi_all, na.rm = TRUE)
+  lookup <- vector("list", max_bmi)
+  
+  for (i in seq(min_bmi, max_bmi)) {
+    lookup[[i]] <- list(
+      minority = which(dat$bmi_all == i & dat$majority == 0),
+      majority = which(dat$bmi_all == i & dat$majority == 1)
+    )
+  }
+  
+  # 3. Handle boundary conditions (if a specific BMI is missing in a group)
+  # If a specific BMI integer is missing, we borrow from the neighboring integer
+  for (i in seq(min_bmi + 1, max_bmi - 1)) {
+    if (length(lookup[[i]]$minority) == 0) lookup[[i]]$minority <- lookup[[i-1]]$minority
+    if (length(lookup[[i]]$majority) == 0) lookup[[i]]$majority <- lookup[[i-1]]$majority
+  }
+
+  ret_list <- list()
+  
+  for (maj_grp in c(0, 1)) {
+    # Sample from the GLOBAL BMI distribution of the entire data set
+    # This forces both Majority and Minority groups to have the same BMI profile
+    bmi_samples <- sample(dat$bmi_all, n_mc[[maj_grp + 1]], replace = TRUE)
+    
+    # Select rows based on sampled BMI
+    rows <- lapply(unique(bmi_samples), function(bmi_i) {
+      n_samp <- sum(bmi_samples == bmi_i)
+      target_indices <- if(maj_grp == 0) lookup[[bmi_i]]$minority else lookup[[bmi_i]]$majority
+      
+      if(length(target_indices) == 0) return(NULL)
+      sample(x = target_indices, size = n_samp, replace = TRUE)
+    })
+    
+    ret_list[[maj_grp + 1]] <- dat[unlist(rows)]
+  }
+  
+  # Combine the two adjusted groups
+  rbindlist(ret_list)
+}
+
+# Run the adjustment
+adj_data <- mc_bmi_adjust(final_data)
+
+mediator_results <- adj_data[, list(
+  FluidsLytes  = mean(FluidsLytes),
+  Arrhythmia   = mean(Arrhythmia),
+  Liver         = mean(Liver),
+  Coagulopathy = mean(Coagulopathy),
+  NeuroOther = mean(NeuroOther)
+), by = "bmi_ind"]
+library(kableExtra)
+
+# 1. Create a simple look up data frame
+labels_lookup <- data.frame(
+  bmi_ind = c(0, 1),
+  BMI_Category = c("Normal Weight (X=0)", "Overweight (X=1)")
+)
+
+# 2. Prepare the data
+table_df <- mediator_results %>%
+  mutate(bmi_ind = as.numeric(as.character(bmi_ind))) %>%
+  left_join(labels_lookup, by = "bmi_ind") %>%
+  mutate(across(where(is.numeric), ~ . * 100)) %>%
+  select(BMI_Category, FluidsLytes, Arrhythmia, Liver, Coagulopathy, NeuroOther) %>%
+  arrange(desc(BMI_Category))
+
+# 3. Create table using kable
+knitr::kable(
+  table_df,
+  booktabs = TRUE,
+  digits = 2,
+  caption = "Table 3: Acute Physiological Mediation by BMI Status",
+  col.names = c("BMI Category", "Fluids/Lytes", "Arrhythmia", "Liver", "Coagulopathy", "NeuroOther")
+)
+```
+
+When investigating the indirect effect, we see that there is a 1.77% increase for FluidsLytes for overweight individuals compared to normal weight and a small increase, less than 1% for Coagulopathy and NeuroOther. However, there is a 1.3-1.4% decrease for Arrhythmia and Liver, having a higher percent for normal weight individuals compared to overweight, which is against our expectations and explains why the $x\text{-}DE$ does not have as extreme of a negative value as it could as those two make up most of the negative difference that the other three mediators have.
+
+\subsubsection{Direct Effect Heterogeneity}
+
+Finally, the direct effect shows that there is a better survival rate for overweight patients compared to normal weight patients even after adjusting for confounders and mediators. This is unexpected as obesity is considered a major risk factor for type two diabetes, hypertension, cornary heart disease and certain cancers. So, we investigate this further by analyzing the heterogeneity of the direct effect with age and the charlson index two of the counfunders that had the most variability.
+
+```{r echo=FALSE}
+#Looking at the Direct Effect
+source("r/cnd-effects.R")
+source("r/one-step-debiased.R")
+final_data[, bmi_label := NULL]
+final_data[, death := as.integer(death)]
+cndE_obj <- cnd_effect(final_data, 
+                       X = X, 
+                       Z = Z, 
+                       W = W, 
+                       Y = Y, 
+                       method = "osd")
+sel_covs <- c("age", "charlson")
+cmbn_E <- function(sel_covs, src = "miiv") {
+  dgs <- c(0:3, 5:15, 25:35)
+  dgs_lst <- lapply(dgs, function(i) list(diag_index = i))
+  names(dgs_lst) <- dgs
+  
+  covs <- list(
+    age = list(
+      `18-49` = list(age = 18:49), 
+      `50-64` = list(age = 50:64), 
+      `65-74` = list(age = 65:74), 
+      `75+`   = list(age = 75:110)
+    ),
+    charlson = list(
+      `0-2`  = list(charlson = 0:2),
+      `3-5`  = list(charlson = 3:5),
+      `6+`  = list(charlson = 6:20)
+    ),
+    FluidsLytes = list(
+      `No`  = list(FluidsLytes = 0),
+      `Yes` = list(FluidsLytes = 1)
+    ),
+    sex = list(
+      `Female` = list(sex = 0),
+      `Male`   = list(sex = 1)
+    ),
+    majority = list(
+      `Minority` = list(majority = 0),
+      `Majority` = list(majority = 1)
+    )
+  )
+  
+  # Select only the ones requested
+  covs <- covs[sel_covs]
+  
+  # Check if any requested covs were missing
+  if (any(sapply(covs, is.null))) {
+    stop(paste("Missing definition for:", paste(sel_covs[sapply(covs, is.null)], collapse=", ")))
+  }
+  
+  grid <- expand.grid(lapply(covs, function(x) seq_along(x)))
+  
+  E_nms <- list(); E_lst <- list()
+  for (i in seq_len(nrow(grid))) {
+    block <- list(); nm <- c()
+    for (j in seq_len(ncol(grid))) {
+      block <- c(block, covs[[j]][[grid[i, j]]])
+      nm <- c(nm, names(covs[[j]])[grid[i, j]])
+    }
+    E_nms[[i]] <- nm
+    E_lst[[i]] <- block
+  }
+  
+  E_nms_df <- data.frame(do.call(rbind, E_nms))
+  names(E_nms_df) <- sel_covs
+  attr(E_lst, "E_names") <- E_nms_df
+  return(E_lst)
+}
+E_lst <- cmbn_E(sel_covs, "miiv")
+cde_results <- infer(cndE_obj, E_lst)
+plt_E_cnd(cde_results, c("age", "charlson"), ttl = "Table 4: Direct Effect Heterogeneity")
+```
+
+When comparing Charlson index with age and analyzing the direct effect, we can conclude that on average, those with a higher Charlson index tend to have a higher direct effect, but only those age groups from 18-49 and 65-74. This could be explained by the fact that they have a higher risk of death so they come to the ICU more often. Otherwise, the influence of the Charlson index and age on the direct effect is small and most of the confidence intervals are wider, so we can not conclude that the effect sign is influenced by the Charlson index and age.
+
+\subsubsection{Conclusions/Limitations}
+
+In this analysis, we composed the mortality difference between normal-weight and overweight patients into spurious, direct, and indirect components. The findings affirm the presence of the obesity paradox as the majority of the difference came specifically from the direct survival advantage ($x$-DE) for overweight patients. The baseline confounders and physiological mediators account for a proportion of this mediation, however, this proportion is very small as some mediators support an advantage for being overweight such as Arrhythmia and Liver, while others like FluidsLytes, Coagulopathy, and the Charlson index suggest an advantage for being underweight. The analysis of heterogeneity suggests that there is more of a positive direct effect for higher groups, but most of the positive direct effect remains unexplained.
+
+There are also some limitations to these conclusions:
+
+\begin{enumerate}
+\item \textbf{Selection Bias:} There is the possibility of selection bias which could occur if sicker patients die faster, before they can be included. Also, there could be an unmeasured factor that influences disease risk and is a stronger predictor of mortality than BMI or obesity.
+
+\item \textbf{Unobserved Confounding:} The identification runs under the assumption that there is no unobserved confounding. However, variables such as pre hospital nutritional status, muscle mass and strength, cardiorespiratory fitness, and others are not fully captured in the data. More analysis would be required to calculate the effect of these unobserved confounders.
+
+\item \textbf{Missing Data:} About $46.39\%$ of the ICU mediators data, around $61.85\%$ of the charlson index data, and about $46.94\%$ of the BMI data were missing. This is a large enough amount that could artificially lower the variability of the data by giving more bias to the median value and potentially skewing how the data is viewed. More analysis is needed to account for this.
+
+\item \textbf{BMI Groups:} Not all of the BMI groups are included. Patients with obese level BMIs ($>35$) or underweight status ($<18.5$) were excluded from analysis, but they could have challenges not included in this model that could change the Total Variation.
+
+\end{enumerate}
+
+While the data does suggest a small survival advantage, there could be unobserved confounders that have a stronger correlation to mortality in the ICU that are causing this paradox, meaning the Obesity Paradox still requires further investigation until it is fully understood.
+
+\newpage
+
+\section{References}
+
+Banack, Hailey R, and Jay S Kaufman. “Does selection bias explain the obesity paradox among individuals with cardiovascular disease?.” Annals of epidemiology vol. 25,5 (2015): 342-9. doi:10.1016/j.annepidem.2015.02.008
+
+Hainer, Vojtech, and Irena Aldhoon-Hainerová. “Obesity paradox does exist.” Diabetes care vol. 36 Suppl 2,Suppl 2 (2013): S276-81. doi:10.2337/dcS13-2023
+
+Johnson, Alistair, et al. "MIMIC-IV" (version 2.2). PhysioNet (2023). RRID:SCR_007345. https://doi.org/10.13026/6mm1-ek67
+
+Mullen, John T et al. “The obesity paradox: body mass index and outcomes in patients undergoing nonbariatric general surgery.” Annals of surgery vol. 250,1 (2009): 166-72. doi:10.1097/SLA.0b013e3181ad8935
+
+Robinson, Whitney R et al. “Selection bias: a missing factor in the obesity paradox debate.” Obesity (Silver Spring, Md.) vol. 22,3 (2014): 625. doi:10.1002/oby.20666
+
