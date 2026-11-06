@@ -35,13 +35,3 @@ This project goes beyond standard observational association by deploying **Struc
 * **Mediator Counterbalance:** Certain acute conditions exhibited higher frequencies in normal weight patients, counteracting expected survival trajectories and dampening the overall negative direct effect.
 * **Risk Stratification Implications:** The findings indicate that standard clinical risk models must account for causal mediation and selection biases rather than taking observational risk ratios at face value.
 
----
-
-## Repository Structure
-
-```text
-├── data/                    # Processed MIMIC-IV extracts
-├── notebooks/               # R scripts for AIPW estimation and DAG modeling
-├── figures/                 # Causal decomposition plots 
-├── STATS_C160_Report.pdf    # Report
-└── README.md
