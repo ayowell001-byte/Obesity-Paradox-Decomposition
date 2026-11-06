@@ -23,7 +23,7 @@ This project goes beyond standard observational association by deploying **Struc
 ## Key Technical Highlights
 
 * **Structural Causal Models (SCMs) & DAGs:** Constructed a Directed Acyclic Graph (DAG) for backdoor admissibility and conditional independence assumptions.
-* **Augmented Inverse Propensity Weighting (AIPW):** Implemented double estimators by combining propensity score modeling ($\pi(z))$ and outcome regression ($\mu_x(z)$) to handle the high dimensional covariate spaces and missing data structures without incurring specification bias.
+* **Augmented Inverse Propensity Weighting (AIPW):** Implemented double estimators by combining propensity score modeling ($\pi(z))$ and outcome regression ($\mu(z)$) to handle the high dimensional covariate spaces and missing data structures without incurring specification bias.
 * **Mediation and Heterogeneity Analysis:** Decomposed physiological pathways and evaluated effect heterogeneity across age brackets and Charlson Comorbidity Index.
 * **Data Handling & Limitations Analysis:** Addressed real-world data challenges such as substantial missingness and selection bias considerations.
 
